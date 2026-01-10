@@ -1,0 +1,99 @@
+app-id: com.github.OP88.Capture
+runtime: org.freedesktop.Platform
+runtime-version: "24.08"
+sdk: org.freedesktop.Sdk
+base: com.riverbankcomputing.PyQt.BaseApp
+base-version: "6.8"
+command: capture
+cleanup-commands:
+  - /app/cleanup-BaseApp.sh
+build-options:
+  env:
+    - BASEAPP_REMOVE_WEBENGINE=1
+
+finish-args:
+  # X11 and Wayland access for GUI
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+
+  # GPU acceleration for image processing
+  - --device=dri
+
+  # File system access
+  - --filesystem=xdg-pictures:rw
+  - --filesystem=xdg-download:rw
+  - --filesystem=xdg-documents:rw
+
+  # Persistent data directory
+  - --persist=.local/share/capture
+
+modules:
+  # Tesseract OCR dependencies
+  - name: leptonica
+    buildsystem: autotools
+    sources:
+      - type: archive
+        url: https://github.com/DanBloomberg/leptonica/releases/download/1.84.1/leptonica-1.84.1.tar.gz
+        sha256: 2b3e1254b1cca381e77c819b59ca99774ff43530209b9aeb511e1d46588a64f6
+
+  - name: tesseract
+    buildsystem: autotools
+    sources:
+      - type: archive
+        url: https://github.com/tesseract-ocr/tesseract/archive/5.3.4.tar.gz
+        sha256: 141afc12b34a14bb691a939b4b122db0d51bd38feda7f41696822bacea7710c7
+    post-install:
+      - install -d /app/share/tessdata
+
+  # Tesseract English language data
+  - name: tesseract-eng
+    buildsystem: simple
+    build-commands:
+      - install -Dm644 eng.traineddata /app/share/tessdata/eng.traineddata
+    sources:
+      - type: file
+        url: https://github.com/tesseract-ocr/tessdata_fast/raw/main/eng.traineddata
+        sha256: 7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2
+
+  # Python dependencies from generated JSON (excluding PyQt - provided by BaseApp)
+  - python3-requirements-flathub.json
+
+  # Capture application
+  - name: capture
+    buildsystem: simple
+    build-commands:
+      # Install application files
+      - mkdir -p /app/share/capture
+      - cp -r src /app/share/capture/
+      - cp run.py /app/share/capture/
+      - cp requirements.txt /app/share/capture/
+      - cp README.md /app/share/capture/
+      - cp LICENSE /app/share/capture/
+
+      # Install desktop file
+      - install -Dm644 com.github.OP88.Capture.desktop /app/share/applications/com.github.OP88.Capture.desktop
+
+      # Install AppStream metadata
+      - install -Dm644 com.github.OP88.Capture.appdata.xml /app/share/metainfo/com.github.OP88.Capture.appdata.xml
+
+      # Install icon (multiple sizes)
+      - install -Dm644 capture_icon.png /app/share/icons/hicolor/512x512/apps/com.github.OP88.Capture.png
+      - install -Dm644 capture_icon.png /app/share/icons/hicolor/256x256/apps/com.github.OP88.Capture.png
+      - install -Dm644 capture_icon.png /app/share/icons/hicolor/128x128/apps/com.github.OP88.Capture.png
+
+      # Create launcher script
+      - |
+        cat > /app/bin/capture << 'EOF'
+        #!/bin/bash
+        export TESSDATA_PREFIX=/app/share
+        cd /app/share/capture
+        exec python3 run.py "$@"
+        EOF
+      - chmod +x /app/bin/capture
+
+    sources:
+      - type: git
+        url: https://github.com/OP-88/Capture.git
+      tag: v1.0.4
+      commit: fe20cb6f048f209707ca32d14df20d207966040e
